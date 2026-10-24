@@ -19,7 +19,7 @@
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://apis.google.com https://accounts.google.com https://www.gstatic.com; connect-src 'self' https://*.firebaseio.com https://*.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://accounts.google.com https://*.workers.dev https://develox.in wss://*.firebaseio.com; img-src 'self' data: blob: https://lh3.googleusercontent.com https://*.googleusercontent.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; frame-src 'self' https://accounts.google.com; object-src 'none'; base-uri 'self';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: https://apis.google.com https://accounts.google.com https://www.gstatic.com; worker-src 'self' blob:; connect-src 'self' blob: data: https://*.firebaseio.com https://*.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://accounts.google.com https://*.workers.dev https://*.develox.in https://develox.in https://www.gstatic.com wss://*.firebaseio.com; img-src 'self' data: blob: https://lh3.googleusercontent.com https://*.googleusercontent.com https://*; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; frame-src 'self' https://accounts.google.com; object-src 'none'; base-uri 'self';">
   <meta name="description" content="Diet & Nutrition AI Assistant">
   <meta name="google-signin-client_id" content="553500920734-hhvf8ld5gsbqifsi8p80df5jkb4a2sfj.apps.googleusercontent.com">
 
@@ -42,10 +42,74 @@
       height: 100%;
       overflow-x: hidden;
       background-color: #F8FAFC;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    #loading-screen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, #F0FDF4 0%, #FFFFFF 50%, #ECFDF5 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 999999;
+      transition: opacity 0.4s ease, visibility 0.4s ease;
+    }
+    .loading-logo {
+      width: 72px;
+      height: 72px;
+      border-radius: 20px;
+      background: linear-gradient(135deg, #059669 0%, #10B981 100%);
+      box-shadow: 0 10px 25px -5px rgba(5, 150, 105, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 36px;
+      margin-bottom: 20px;
+      animation: pulseLogo 2s infinite ease-in-out;
+    }
+    .loading-title {
+      font-size: 22px;
+      font-weight: 800;
+      color: #0F172A;
+      margin-bottom: 6px;
+      letter-spacing: -0.5px;
+    }
+    .loading-sub {
+      font-size: 14px;
+      color: #64748B;
+      font-weight: 500;
+      margin-bottom: 24px;
+      text-align: center;
+      max-width: 320px;
+    }
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 3.5px solid #E2E8F0;
+      border-top-color: #059669;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    @keyframes pulseLogo {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
     }
   </style>
 </head>
 <body>
+  <div id="loading-screen">
+    <div class="loading-logo">🥗</div>
+    <div class="loading-title">Doctor's Diet AI</div>
+    <div class="loading-sub">Loading your personalized nutrition assistant...</div>
+    <div class="spinner"></div>
+  </div>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader
@@ -160,6 +224,20 @@
     window['dietSpeech.stopRecognition'] = window.dietStopRecognition;
     window['dietSpeech.speak'] = window.dietSpeak;
     window['dietSpeech.stopSpeaking'] = window.dietStopSpeaking;
+
+    // Smoothly remove loading screen on first Flutter frame or fallback timeout
+    function hideLoadingScreen() {
+      var loader = document.getElementById('loading-screen');
+      if (loader) {
+        loader.style.opacity = '0';
+        setTimeout(function() {
+          if (loader.parentNode) loader.parentNode.removeChild(loader);
+        }, 400);
+      }
+    }
+    window.addEventListener('flutter-first-frame', hideLoadingScreen);
+    // Safety fallback in case event is missed
+    setTimeout(hideLoadingScreen, 12000);
   </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>

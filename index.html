@@ -44,34 +44,25 @@
   <script>
 (function() {
   function injectDoctorsDietBtn() {
-    var intro = document.querySelector('.case-intro');
-    if (!intro) return;
-    if (intro.querySelector('#doctorsdiet-btn')) return;
-    
-    var contactLink = intro.querySelector('a[href="/contact"]');
-    var btn = document.createElement('a');
-    btn.href = '/doctorsdiet/';
-    btn.id = 'doctorsdiet-btn';
-    btn.style.cssText = 'display: inline-flex; align-items: center; gap: 8px; background: linear-gradient(135deg, #059669 0%, #10b981 100%); color: #ffffff !important; padding: 8px 18px; border-radius: 9999px; font-family: "DM Sans", -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; font-weight: 700; text-decoration: none; border-bottom: none !important; box-shadow: 0 4px 14px rgba(5,150,105,0.35); border: 1px solid rgba(255,255,255,0.25); transition: transform 0.2s ease, box-shadow 0.2s ease;';
-    btn.onmouseover = function() { this.style.transform = 'translateY(-2px) scale(1.02)'; this.style.boxShadow = '0 8px 20px rgba(5,150,105,0.5)'; };
-    btn.onmouseout = function() { this.style.transform = 'none'; this.style.boxShadow = '0 4px 14px rgba(5,150,105,0.35)'; };
-    btn.innerHTML = '<span style="font-size: 15px; line-height: 1;">&#x1F957;</span><span>Doctor\'s Diet AI</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17l9.2-9.2M17 17V8H8"/></svg>';
-    
-    if (contactLink) {
-      var row = intro.querySelector('.case-links-row');
-      if (!row) {
-        row = document.createElement('div');
-        row.className = 'case-links-row';
-        row.style.cssText = 'display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 14px;';
-        contactLink.parentNode.insertBefore(row, contactLink);
-        row.appendChild(contactLink);
-        row.appendChild(btn);
-      } else {
-        row.appendChild(btn);
-      }
-    } else {
+    try {
+      if (document.getElementById('doctorsdiet-btn')) return;
+      var intro = document.querySelector('.case-intro') || document.querySelector('.case-links-row');
+      if (!intro) return;
+      
+      var btn = document.createElement('a');
+      btn.href = '/doctorsdiet/';
+      btn.id = 'doctorsdiet-btn';
+      btn.style.cssText = 'display: inline-flex; align-items: center; gap: 8px; background: linear-gradient(135deg, #059669 0%, #10b981 100%); color: #ffffff !important; padding: 8px 18px; border-radius: 9999px; font-family: "DM Sans", -apple-system, BlinkMacSystemFont, sans-serif; font-size: 13px; font-weight: 700; text-decoration: none; border-bottom: none !important; box-shadow: 0 4px 14px rgba(5,150,105,0.35); border: 1px solid rgba(255,255,255,0.25); transition: transform 0.2s ease, box-shadow 0.2s ease; margin-top: 14px;';
+      btn.onmouseover = function() { this.style.transform = 'translateY(-2px) scale(1.02)'; this.style.boxShadow = '0 8px 20px rgba(5,150,105,0.5)'; };
+      btn.onmouseout = function() { this.style.transform = 'none'; this.style.boxShadow = '0 4px 14px rgba(5,150,105,0.35)'; };
+      btn.innerHTML = '<span style="font-size: 15px; line-height: 1;">&#x1F957;</span><span>Doctor\'s Diet AI</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17l9.2-9.2M17 17V8H8"/></svg>';
+      
       intro.appendChild(btn);
-    }
+      if (window._dietObs) {
+        window._dietObs.disconnect();
+        window._dietObs = null;
+      }
+    } catch(e) {}
   }
 
   if (document.readyState === 'loading') {
@@ -80,10 +71,18 @@
     injectDoctorsDietBtn();
   }
 
-  var observer = new MutationObserver(function() {
-    injectDoctorsDietBtn();
-  });
-  observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
+  try {
+    window._dietObs = new MutationObserver(function() {
+      injectDoctorsDietBtn();
+    });
+    window._dietObs.observe(document.body || document.documentElement, { childList: true, subtree: true });
+    setTimeout(function() {
+      if (window._dietObs) {
+        window._dietObs.disconnect();
+        window._dietObs = null;
+      }
+    }, 4000);
+  } catch(e) {}
 })();
 </script>
   </body>
