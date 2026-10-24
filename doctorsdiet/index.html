@@ -60,7 +60,7 @@
       startRecognition: function(lang, onResult, onError, onEnd) {
         var SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SpeechRec) {
-          if (onError) onError("Microphone speech recognition is not supported in this browser. Please use Chrome or Edge.");
+          if (onError) onError("Microphone speech recognition is not supported in this browser. Please use Google Chrome or Microsoft Edge.");
           return;
         }
         try {
@@ -68,7 +68,7 @@
             try { this.recognition.abort(); } catch(e){}
           }
           var rec = new SpeechRec();
-          rec.lang = lang || 'en-IN'; // 'te-IN' for Telugu, 'en-IN' for English
+          rec.lang = lang || 'en-IN';
           rec.continuous = false;
           rec.interimResults = false;
           rec.maxAlternatives = 1;
@@ -80,6 +80,13 @@
           };
           rec.onerror = function(event) {
             var err = event.error || "Speech recognition error";
+            if (err === 'not-allowed' || err === 'permission-denied') {
+              err = "Microphone access was denied. Please allow microphone permission in your browser address bar.";
+            } else if (err === 'no-speech') {
+              err = "No speech detected. Please tap mic and speak clearly.";
+            } else if (err === 'network') {
+              err = "Network error during speech recognition. Please check your internet connection.";
+            }
             if (onError) onError(err);
           };
           rec.onend = function() {
@@ -91,7 +98,7 @@
           this.isListening = true;
         } catch(e) {
           this.isListening = false;
-          if (onError) onError(e.message || "Failed to start microphone");
+          if (onError) onError(e.message || "Failed to start microphone. Please check browser permissions.");
         }
       },
       stopRecognition: function() {
@@ -100,15 +107,24 @@
           this.isListening = false;
         }
       },
-      speak: function(text, lang) {
+      speak: function(text, lang, onEnd) {
         if (!window.speechSynthesis) return;
-        window.speechSynthesis.cancel();
-        // Clean markdown characters before speaking
+        try { window.speechSynthesis.cancel(); } catch(e){}
         var clean = text.replace(/[*_#`~>]/g, ' ').replace(/\s+/g, ' ').trim();
         var utterance = new SpeechSynthesisUtterance(clean);
         utterance.lang = lang || 'en-IN';
         utterance.rate = 1.0;
         utterance.pitch = 1.0;
+        utterance.onend = function() {
+          if (onEnd) {
+            try { onEnd(); } catch(e){}
+          }
+        };
+        utterance.onerror = function() {
+          if (onEnd) {
+            try { onEnd(); } catch(e){}
+          }
+        };
         window.speechSynthesis.speak(utterance);
       },
       stopSpeaking: function() {
@@ -117,6 +133,26 @@
         }
       }
     };
+
+    // Global top-level bindings for direct JS interop
+    window.dietStartRecognition = function(lang, onResult, onError, onEnd) {
+      window.dietSpeech.startRecognition(lang, onResult, onError, onEnd);
+    };
+    window.dietStopRecognition = function() {
+      window.dietSpeech.stopRecognition();
+    };
+    window.dietSpeak = function(text, lang, onEnd) {
+      window.dietSpeech.speak(text, lang, onEnd);
+    };
+    window.dietStopSpeaking = function() {
+      window.dietSpeech.stopSpeaking();
+    };
+
+    // Also alias dotted properties so any lookup style succeeds
+    window['dietSpeech.startRecognition'] = window.dietStartRecognition;
+    window['dietSpeech.stopRecognition'] = window.dietStopRecognition;
+    window['dietSpeech.speak'] = window.dietSpeak;
+    window['dietSpeech.stopSpeaking'] = window.dietStopSpeaking;
   </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
