@@ -1,11 +1,11 @@
 {
-    "name": "diet",
-    "short_name": "diet",
+    "name": "Doctor's Diet - AI Nutrition Assistant",
+    "short_name": "Doctor's Diet",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#F8FAFC",
+    "theme_color": "#059669",
+    "description": "Personalized AI-powered nutrition, clinical diet plans, calorie tracking, and meal schedules.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
@@ -33,3 +33,4 @@
         }
     ]
 }
+
