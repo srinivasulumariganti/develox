@@ -228,6 +228,151 @@
     window['dietSpeech.speak'] = window.dietSpeak;
     window['dietSpeech.stopSpeaking'] = window.dietStopSpeaking;
 
+    // Doctor's Diet Web Alarm & Reminder Engine (PWA & Web)
+    window.dietAlarm = {
+      _timers: {},
+      requestPermission: async function() {
+        if (!("Notification" in window)) return 'unsupported';
+        try {
+          if (Notification.permission === 'default') {
+            return await Notification.requestPermission();
+          }
+          return Notification.permission;
+        } catch(e) {
+          return 'denied';
+        }
+      },
+      playChime: function(type) {
+        try {
+          var AudioCtx = window.AudioContext || window.webkitAudioContext;
+          if (!AudioCtx) return;
+          var ctx = new AudioCtx();
+          if (ctx.state === 'suspended') {
+            ctx.resume();
+          }
+          var now = ctx.currentTime;
+          var notes = type === 'water' ? [587.33, 880.00] : [523.25, 659.25, 783.99, 1046.50];
+          notes.forEach(function(freq, i) {
+            var osc = ctx.createOscillator();
+            var gain = ctx.createGain();
+            osc.type = type === 'water' ? 'triangle' : 'sine';
+            osc.frequency.setValueAtTime(freq, now + i * 0.16);
+            gain.gain.setValueAtTime(0.001, now + i * 0.16);
+            gain.gain.linearRampToValueAtTime(0.35, now + i * 0.16 + 0.03);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.16 + 0.45);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now + i * 0.16);
+            osc.stop(now + i * 0.16 + 0.46);
+          });
+        } catch(e) {
+          console.warn('Diet alarm audio chime note:', e);
+        }
+      },
+      showNotification: function(title, body) {
+        try {
+          if ("Notification" in window && Notification.permission === "granted") {
+            if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+              navigator.serviceWorker.ready.then(function(reg) {
+                reg.showNotification(title, {
+                  body: body,
+                  icon: 'favicon.png',
+                  badge: 'favicon.png',
+                  vibrate: [200, 100, 200],
+                  tag: 'diet-alarm-' + Date.now(),
+                  renotify: true
+                });
+              });
+            } else {
+              new Notification(title, {
+                body: body,
+                icon: 'favicon.png'
+              });
+            }
+          }
+        } catch(e) {
+          console.warn('Diet notification error:', e);
+        }
+      },
+      scheduleAlarm: function(title, hour, minute) {
+        var self = this;
+        this.requestPermission();
+        var now = new Date();
+        var target = new Date();
+        target.setHours(parseInt(hour, 10), parseInt(minute, 10), 0, 0);
+        if (target.getTime() <= now.getTime()) {
+          target.setDate(target.getDate() + 1);
+        }
+        var delayMs = target.getTime() - now.getTime();
+        var key = 'meal_' + title;
+        if (this._timers[key]) {
+          clearTimeout(this._timers[key]);
+        }
+        this._timers[key] = setTimeout(function() {
+          self.playChime('meal');
+          self.showNotification("⏰ Doctor's Diet: " + title, "Time for your scheduled " + title + "! Eat healthy and stay consistent.");
+          self._timers[key] = setInterval(function() {
+            self.playChime('meal');
+            self.showNotification("⏰ Doctor's Diet: " + title, "Time for your scheduled " + title + "!");
+          }, 24 * 60 * 60 * 1000);
+        }, delayMs);
+        this.playChime('meal');
+        return true;
+      },
+      scheduleTimer: function(seconds, title) {
+        var self = this;
+        this.requestPermission();
+        var sec = parseInt(seconds, 10) || 7200;
+        var key = 'timer_water';
+        if (this._timers[key]) {
+          clearTimeout(this._timers[key]);
+        }
+        this._timers[key] = setTimeout(function() {
+          self.playChime('water');
+          self.showNotification("💧 Doctor's Diet: Hydration Reminder", "Drink a glass of water now to stay refreshed and maintain good digestion!");
+          self._timers[key] = setInterval(function() {
+            self.playChime('water');
+            self.showNotification("💧 Doctor's Diet: Hydration Reminder", "Time to hydrate! Drink a glass of water.");
+          }, sec * 1000);
+        }, sec * 1000);
+        this.playChime('water');
+        return true;
+      },
+      openCalendar: function(title, hour, minute) {
+        try {
+          var now = new Date();
+          var start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), parseInt(hour, 10), parseInt(minute, 10));
+          if (start.getTime() <= now.getTime()) {
+            start.setDate(start.getDate() + 1);
+          }
+          var end = new Date(start.getTime() + 30 * 60000);
+          function fmt(d) {
+            return d.toISOString().replace(/-|:|\.\d\d\d/g, "");
+          }
+          var url = "https://calendar.google.com/calendar/render?action=TEMPLATE" +
+            "&text=" + encodeURIComponent("Doctor's Diet: " + title) +
+            "&dates=" + fmt(start) + "/" + fmt(end) +
+            "&details=" + encodeURIComponent("Personalized diet meal reminder from Doctor's Diet AI app.") +
+            "&recur=RRULE:FREQ=DAILY";
+          window.open(url, '_blank');
+        } catch(e) {}
+      }
+    };
+
+    window.dietScheduleAlarm = function(title, hour, minute) {
+      return window.dietAlarm.scheduleAlarm(title, hour, minute);
+    };
+    window.dietScheduleTimer = function(seconds, title) {
+      return window.dietAlarm.scheduleTimer(seconds, title);
+    };
+    window.dietRequestAlarmPermission = function() {
+      return window.dietAlarm.requestPermission();
+    };
+    window.dietOpenCalendar = function(title, hour, minute) {
+      return window.dietAlarm.openCalendar(title, hour, minute);
+    };
+
+
     // Smoothly remove loading screen on first Flutter frame or fallback timeout
     function hideLoadingScreen() {
       var loader = document.getElementById('loading-screen');
