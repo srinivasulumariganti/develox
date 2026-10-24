@@ -53,6 +53,71 @@
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
+  <script>
+    window.dietSpeech = {
+      recognition: null,
+      isListening: false,
+      startRecognition: function(lang, onResult, onError, onEnd) {
+        var SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRec) {
+          if (onError) onError("Microphone speech recognition is not supported in this browser. Please use Chrome or Edge.");
+          return;
+        }
+        try {
+          if (this.recognition) {
+            try { this.recognition.abort(); } catch(e){}
+          }
+          var rec = new SpeechRec();
+          rec.lang = lang || 'en-IN'; // 'te-IN' for Telugu, 'en-IN' for English
+          rec.continuous = false;
+          rec.interimResults = false;
+          rec.maxAlternatives = 1;
+          rec.onresult = function(event) {
+            if (event.results && event.results.length > 0 && event.results[0].length > 0) {
+              var text = event.results[0][0].transcript;
+              if (onResult) onResult(text);
+            }
+          };
+          rec.onerror = function(event) {
+            var err = event.error || "Speech recognition error";
+            if (onError) onError(err);
+          };
+          rec.onend = function() {
+            window.dietSpeech.isListening = false;
+            if (onEnd) onEnd();
+          };
+          rec.start();
+          this.recognition = rec;
+          this.isListening = true;
+        } catch(e) {
+          this.isListening = false;
+          if (onError) onError(e.message || "Failed to start microphone");
+        }
+      },
+      stopRecognition: function() {
+        if (this.recognition) {
+          try { this.recognition.stop(); } catch(e){}
+          this.isListening = false;
+        }
+      },
+      speak: function(text, lang) {
+        if (!window.speechSynthesis) return;
+        window.speechSynthesis.cancel();
+        // Clean markdown characters before speaking
+        var clean = text.replace(/[*_#`~>]/g, ' ').replace(/\s+/g, ' ').trim();
+        var utterance = new SpeechSynthesisUtterance(clean);
+        utterance.lang = lang || 'en-IN';
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+        window.speechSynthesis.speak(utterance);
+      },
+      stopSpeaking: function() {
+        if (window.speechSynthesis) {
+          window.speechSynthesis.cancel();
+        }
+      }
+    };
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
