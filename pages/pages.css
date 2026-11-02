@@ -3,7 +3,7 @@ a{color:#3569f6}a:hover{color:#214de3}:focus-visible{outline:3px solid #3569f6;o
 .skip{position:absolute;left:-999px;top:8px;background:#161c28;color:#fff;padding:10px 14px;border-radius:4px;z-index:50}.skip:focus{left:8px}
 .hd{position:sticky;top:0;z-index:10;background:#fffffff2;border-bottom:1px solid #dce5f4;backdrop-filter:blur(8px)}
 .wrap{max-width:1180px;margin:0 auto;padding:0 24px}.hd .wrap{display:flex;align-items:center;justify-content:space-between;height:72px;gap:16px}
-.hd img{width:147px;height:34px;object-fit:contain;display:block}.nav{display:flex;align-items:center;gap:26px}.nav a{color:#242c3a;text-decoration:none;font-weight:600;font-size:14px}.nav a:hover{color:#3569f6}
+.hd a{display:inline-flex;align-items:center;gap:9px;text-decoration:none}.hd .brand-symbol{width:34px!important;height:34px!important;object-fit:contain;flex-shrink:0;display:block}.hd .brand-wordmark{width:147px!important;height:34px!important;object-fit:contain;display:block}.hd img{object-fit:contain;display:block}.nav{display:flex;align-items:center;gap:26px}.nav a{color:#242c3a;text-decoration:none;font-weight:600;font-size:14px}.nav a:hover{color:#3569f6}
 .btn{display:inline-flex;align-items:center;gap:8px;background:#3569f6;color:#fff!important;border:0;border-radius:3px;padding:13px 20px;font:600 14px 'DM Sans',sans-serif;cursor:pointer;text-decoration:none}.btn:hover{background:#214de3}.btn[disabled]{opacity:.6;cursor:wait}
 main{flex:1;padding:56px 0 72px}.eyebrow{font:500 11px 'DM Mono',ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase;color:#687384}
 h1{font:800 clamp(34px,5vw,54px)/1.08 'Manrope','DM Sans',sans-serif;letter-spacing:-.03em;margin:10px 0 18px;color:#161c28}h1 em{font-style:normal;color:#5470c0;font-weight:500}
