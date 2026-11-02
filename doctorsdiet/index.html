@@ -343,12 +343,6 @@
       scheduleAlarm: function(title, hour, minute) {
         var self = this;
         this._initAudio();
-        this.playChime('meal');
-        this.requestPermission().then(function(perm) {
-          if (perm === 'granted') {
-            self.showNotification("⏰ Doctor's Diet: Alarm Set", "Alarm scheduled for " + title + " at " + hour + ":" + (minute < 10 ? '0' : '') + minute + ". We'll alert you!");
-          }
-        });
 
         var now = new Date();
         var target = new Date();
@@ -370,16 +364,20 @@
         return true;
       },
 
+      cancelAlarm: function(title) {
+        try {
+          var list = this._getSavedAlarms().filter(function(a) { return a.title !== title; });
+          this._saveAlarms(list);
+          return true;
+        } catch(e) {
+          return false;
+        }
+      },
+
       scheduleTimer: function(seconds, title) {
         var self = this;
         this._initAudio();
-        this.playChime('water');
         var sec = parseInt(seconds, 10) || 7200;
-        this.requestPermission().then(function(perm) {
-          if (perm === 'granted') {
-            self.showNotification("💧 Doctor's Diet: Water Reminder Active", "Hydration timer started for every " + Math.round(sec / 3600) + " hours. Stay refreshed!");
-          }
-        });
 
         try {
           localStorage.setItem('diet_water_reminder', JSON.stringify({
@@ -391,6 +389,15 @@
 
         this._setupHeartbeat();
         return true;
+      },
+
+      cancelWaterReminder: function() {
+        try {
+          localStorage.removeItem('diet_water_reminder');
+          return true;
+        } catch(e) {
+          return false;
+        }
       },
 
       _setupHeartbeat: function() {
@@ -507,8 +514,14 @@
     window.dietScheduleAlarm = function(title, hour, minute) {
       return window.dietAlarm.scheduleAlarm(title, hour, minute);
     };
+    window.dietCancelAlarm = function(title) {
+      return window.dietAlarm.cancelAlarm(title);
+    };
     window.dietScheduleTimer = function(seconds, title) {
       return window.dietAlarm.scheduleTimer(seconds, title);
+    };
+    window.dietCancelWaterReminder = function() {
+      return window.dietAlarm.cancelWaterReminder();
     };
     window.dietRequestAlarmPermission = function() {
       return window.dietAlarm.requestPermission();
