@@ -4,3 +4,15 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(self), geolocation=()
   Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+
+/doctorsdiet/index.html
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/doctorsdiet/flutter_bootstrap.js
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/doctorsdiet/flutter_service_worker.js
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/doctorsdiet/main.dart.js
+  Cache-Control: no-cache, no-store, must-revalidate

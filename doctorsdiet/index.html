@@ -547,7 +547,23 @@
     window.addEventListener('flutter-first-frame', hideLoadingScreen);
     // Safety fallback in case event is missed
     setTimeout(hideLoadingScreen, 12000);
+
+    // Unregister legacy service workers and clear cache storage to force-load latest SaaS UI
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function(regs) {
+        for (var reg of regs) {
+          reg.unregister();
+        }
+      });
+      if ('caches' in window) {
+        caches.keys().then(function(names) {
+          for (var name of names) {
+            caches.delete(name);
+          }
+        });
+      }
+    }
   </script>
-  <script src="flutter_bootstrap.js" async></script>
+  <script src="flutter_bootstrap.js?v=2026110902" async></script>
 </body>
 </html>
