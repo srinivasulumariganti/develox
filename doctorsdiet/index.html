@@ -58,7 +58,7 @@
       left: 0;
       width: 100%;
       height: 100%;
-      background: linear-gradient(135deg, #EEF2FF 0%, #FFFFFF 50%, #F5F3FF 100%);
+      background: linear-gradient(135deg, #F0FDF4 0%, #FFFFFF 50%, #ECFDF5 100%);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -70,7 +70,7 @@
       width: 72px;
       height: 72px;
       border-radius: 20px;
-      background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+      background: linear-gradient(135deg, #059669 0%, #10B981 100%);
       box-shadow: 0 10px 25px -5px rgba(5, 150, 105, 0.4);
       display: flex;
       align-items: center;
@@ -98,7 +98,7 @@
       width: 36px;
       height: 36px;
       border: 3.5px solid #E2E8F0;
-      border-top-color: #4F46E5;
+      border-top-color: #059669;
       border-radius: 50%;
       animation: spin 0.8s linear infinite;
     }
@@ -343,6 +343,12 @@
       scheduleAlarm: function(title, hour, minute) {
         var self = this;
         this._initAudio();
+        this.playChime('meal');
+        this.requestPermission().then(function(perm) {
+          if (perm === 'granted') {
+            self.showNotification("⏰ Doctor's Diet: Alarm Set", "Alarm scheduled for " + title + " at " + hour + ":" + (minute < 10 ? '0' : '') + minute + ". We'll alert you!");
+          }
+        });
 
         var now = new Date();
         var target = new Date();
@@ -364,20 +370,16 @@
         return true;
       },
 
-      cancelAlarm: function(title) {
-        try {
-          var list = this._getSavedAlarms().filter(function(a) { return a.title !== title; });
-          this._saveAlarms(list);
-          return true;
-        } catch(e) {
-          return false;
-        }
-      },
-
       scheduleTimer: function(seconds, title) {
         var self = this;
         this._initAudio();
+        this.playChime('water');
         var sec = parseInt(seconds, 10) || 7200;
+        this.requestPermission().then(function(perm) {
+          if (perm === 'granted') {
+            self.showNotification("💧 Doctor's Diet: Water Reminder Active", "Hydration timer started for every " + Math.round(sec / 3600) + " hours. Stay refreshed!");
+          }
+        });
 
         try {
           localStorage.setItem('diet_water_reminder', JSON.stringify({
@@ -389,15 +391,6 @@
 
         this._setupHeartbeat();
         return true;
-      },
-
-      cancelWaterReminder: function() {
-        try {
-          localStorage.removeItem('diet_water_reminder');
-          return true;
-        } catch(e) {
-          return false;
-        }
       },
 
       _setupHeartbeat: function() {
@@ -514,14 +507,8 @@
     window.dietScheduleAlarm = function(title, hour, minute) {
       return window.dietAlarm.scheduleAlarm(title, hour, minute);
     };
-    window.dietCancelAlarm = function(title) {
-      return window.dietAlarm.cancelAlarm(title);
-    };
     window.dietScheduleTimer = function(seconds, title) {
       return window.dietAlarm.scheduleTimer(seconds, title);
-    };
-    window.dietCancelWaterReminder = function() {
-      return window.dietAlarm.cancelWaterReminder();
     };
     window.dietRequestAlarmPermission = function() {
       return window.dietAlarm.requestPermission();
@@ -547,23 +534,7 @@
     window.addEventListener('flutter-first-frame', hideLoadingScreen);
     // Safety fallback in case event is missed
     setTimeout(hideLoadingScreen, 12000);
-
-    // Unregister legacy service workers and clear cache storage to force-load latest SaaS UI
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(function(regs) {
-        for (var reg of regs) {
-          reg.unregister();
-        }
-      });
-      if ('caches' in window) {
-        caches.keys().then(function(names) {
-          for (var name of names) {
-            caches.delete(name);
-          }
-        });
-      }
-    }
   </script>
-  <script src="flutter_bootstrap.js?v=2026111001" async></script>
+  <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
