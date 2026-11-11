@@ -526,15 +526,14 @@
       openCalendar: function(title, hour, minute, dateKey) {
         try {
           var start = this._targetDate(hour, minute, dateKey);
-          var end = new Date(start.getTime() + 30 * 60000);
+          var end = new Date(start.getTime() + 15 * 60000);
           function fmt(d) {
             return d.toISOString().replace(/-|:|\.\d\d\d/g, "");
           }
           var url = "https://calendar.google.com/calendar/render?action=TEMPLATE" +
             "&text=" + encodeURIComponent("Doctor's Diet: " + title) +
             "&dates=" + fmt(start) + "/" + fmt(end) +
-            "&details=" + encodeURIComponent("Personalized diet meal reminder from Doctor's Diet AI app.") +
-            "&recur=RRULE:FREQ=DAILY";
+            "&details=" + encodeURIComponent("Personalized diet meal reminder from Doctor's Diet AI app.");
           window.open(url, '_blank');
         } catch(e) {}
       },
@@ -543,7 +542,7 @@
         try {
           var now = new Date();
           var start = this._targetDate(hour, minute, dateKey);
-          var end = new Date(start.getTime() + 30 * 60000);
+          var end = new Date(start.getTime() + 15 * 60000);
           function fmt(d) {
             return d.toISOString().replace(/-|:|\.\d\d\d/g, "");
           }
@@ -555,7 +554,6 @@
             "DTSTAMP:" + fmt(now) + "\r\n" +
             "DTSTART:" + fmt(start) + "\r\n" +
             "DTEND:" + fmt(end) + "\r\n" +
-            "RRULE:FREQ=DAILY\r\n" +
             "SUMMARY:⏰ Doctor's Diet: " + title + "\r\n" +
             "DESCRIPTION:Meal reminder from Doctor's Diet AI application.\r\n" +
             "BEGIN:VALARM\r\n" +
