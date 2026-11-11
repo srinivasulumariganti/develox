@@ -28,6 +28,7 @@
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="theme-color" content="#059669">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Doctor's Diet">
@@ -237,7 +238,81 @@
     window.dietAlarm = {
       _timers: {},
       _audioCtx: null,
+      _audioUnlocked: false,
       _heartbeatStarted: false,
+      _swReg: null,
+      _swPromise: null,
+      _swListenerAttached: false,
+      _ringTimer: null,
+      _ringCycles: 0,
+      _activeAlert: null,
+
+      _ensureSw: function() {
+        var self = this;
+        if (!('serviceWorker' in navigator)) {
+          return Promise.resolve(null);
+        }
+        if (!this._swListenerAttached) {
+          this._swListenerAttached = true;
+          navigator.serviceWorker.addEventListener('message', function(event) {
+            var msg = event && event.data ? event.data : {};
+            if (msg.type === 'STOP_ALARM') {
+              self.stopRinging();
+            } else if (msg.type === 'SNOOZE_ALARM') {
+              self.snoozeAlarm(msg.title || 'Meal Reminder', msg.minutes || 5);
+            }
+          });
+        }
+        if (this._swReg && this._swReg.active) {
+          return Promise.resolve(this._swReg);
+        }
+        if (!this._swPromise) {
+          var waitForActive = function(reg) {
+            if (!reg) return Promise.resolve(null);
+            if (reg.active) {
+              self._swReg = reg;
+              return Promise.resolve(reg);
+            }
+            var sw = reg.installing || reg.waiting;
+            if (!sw) {
+              self._swReg = reg;
+              return Promise.resolve(reg);
+            }
+            return new Promise(function(resolve) {
+              var done = false;
+              var finish = function() {
+                if (done) return;
+                done = true;
+                self._swReg = reg;
+                resolve(reg);
+              };
+              sw.addEventListener('statechange', function() {
+                if (sw.state === 'activated' || reg.active) finish();
+              });
+              setTimeout(finish, 900);
+            });
+          };
+          this._swPromise = navigator.serviceWorker.register('pwa_sw.js', { scope: './' })
+            .then(waitForActive)
+            .catch(function() {
+              return navigator.serviceWorker.getRegistration('./').then(waitForActive).catch(function() {
+                return null;
+              });
+            });
+        }
+        return this._swPromise;
+      },
+
+      _unlockAudioHandlers: function() {
+        if (this._audioUnlocked) return;
+        this._audioUnlocked = true;
+        var self = this;
+        var unlock = function() {
+          self._initAudio();
+        };
+        document.addEventListener('pointerdown', unlock, { once: true, passive: true });
+        document.addEventListener('keydown', unlock, { once: true, passive: true });
+      },
 
       _initAudio: function() {
         try {
@@ -254,6 +329,8 @@
       },
 
       requestPermission: async function() {
+        this._ensureSw();
+        this._initAudio();
         if (!("Notification" in window)) return 'unsupported';
         try {
           var perm = Notification.permission;
@@ -282,11 +359,21 @@
         return d.getFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day;
       },
 
+      _format12h: function(h, m) {
+        var ampm = h >= 12 ? 'PM' : 'AM';
+        var h12 = h % 12;
+        if (h12 === 0) h12 = 12;
+        return h12 + ':' + (m < 10 ? '0' : '') + m + ' ' + ampm;
+      },
+
       playChime: function(type) {
         try {
           this._initAudio();
           var ctx = this._audioCtx;
           if (!ctx) return;
+          if (ctx.state === 'suspended' && ctx.resume) {
+            ctx.resume().catch(function() {});
+          }
           var now = ctx.currentTime;
           var notes = type === 'water'
             ? [587.33, 880.00, 1174.66]
@@ -297,7 +384,7 @@
             osc.type = type === 'water' ? 'triangle' : 'sine';
             osc.frequency.setValueAtTime(freq, now + i * 0.14);
             gain.gain.setValueAtTime(0.001, now + i * 0.14);
-            gain.gain.linearRampToValueAtTime(0.4, now + i * 0.14 + 0.03);
+            gain.gain.linearRampToValueAtTime(0.45, now + i * 0.14 + 0.03);
             gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.14 + 0.5);
             osc.connect(gain);
             gain.connect(ctx.destination);
@@ -309,33 +396,159 @@
         }
       },
 
-      showNotification: function(title, body) {
+      _showAlarmBanner: function(type, title, subtitle) {
+        try {
+          var existing = document.getElementById('diet-pwa-alarm-banner');
+          if (existing && existing.parentNode) {
+            existing.parentNode.removeChild(existing);
+          }
+          var self = this;
+          var wrap = document.createElement('div');
+          wrap.id = 'diet-pwa-alarm-banner';
+          wrap.setAttribute('role', 'alert');
+          wrap.style.cssText = 'position:fixed;top:14px;right:14px;z-index:999999;width:min(370px,calc(100vw - 24px));background:#FFFFFF;border:1.5px solid #A7F3D0;border-radius:16px;box-shadow:0 16px 36px rgba(15,23,42,0.18);padding:14px 16px;font-family:Roboto,sans-serif;color:#0F172A;display:flex;flex-direction:column;gap:10px;';
+
+          var header = document.createElement('div');
+          header.style.cssText = 'display:flex;align-items:center;gap:10px;';
+
+          var iconBox = document.createElement('div');
+          iconBox.style.cssText = 'width:38px;height:38px;border-radius:12px;background:#ECFDF5;border:1px solid #A7F3D0;display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0;';
+          iconBox.textContent = type === 'water' ? '💧' : '⏰';
+
+          var textCol = document.createElement('div');
+          textCol.style.cssText = 'flex:1;min-width:0;';
+
+          var titleEl = document.createElement('div');
+          titleEl.style.cssText = 'font-size:14px;font-weight:700;color:#0F172A;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+          titleEl.textContent = title;
+
+          var subEl = document.createElement('div');
+          subEl.style.cssText = 'font-size:12px;color:#475569;margin-top:2px;';
+          subEl.textContent = subtitle;
+
+          textCol.appendChild(titleEl);
+          textCol.appendChild(subEl);
+          header.appendChild(iconBox);
+          header.appendChild(textCol);
+
+          var btnRow = document.createElement('div');
+          btnRow.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;';
+
+          var snoozeBtn = document.createElement('button');
+          snoozeBtn.type = 'button';
+          snoozeBtn.textContent = 'Snooze 5m';
+          snoozeBtn.style.cssText = 'border:1px solid #CBD5E1;background:#F8FAFC;color:#0F172A;border-radius:10px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;';
+          snoozeBtn.onclick = function() {
+            self.snoozeAlarm(title, 5);
+          };
+
+          var dismissBtn = document.createElement('button');
+          dismissBtn.type = 'button';
+          dismissBtn.textContent = 'Dismiss';
+          dismissBtn.style.cssText = 'border:none;background:#059669;color:#FFFFFF;border-radius:10px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;';
+          dismissBtn.onclick = function() {
+            self.stopRinging();
+          };
+
+          btnRow.appendChild(snoozeBtn);
+          btnRow.appendChild(dismissBtn);
+          wrap.appendChild(header);
+          wrap.appendChild(btnRow);
+          document.body.appendChild(wrap);
+        } catch(e) {}
+      },
+
+      startRinging: function(type, title, subtitle) {
+        this.stopRinging();
+        var self = this;
+        this._activeAlert = { type: type, title: title };
+        this._ringCycles = 0;
+        this.playChime(type);
+        this._showAlarmBanner(type, title, subtitle);
+        this._ringTimer = setInterval(function() {
+          self._ringCycles++;
+          if (self._ringCycles >= 10) {
+            clearInterval(self._ringTimer);
+            self._ringTimer = null;
+            return;
+          }
+          self.playChime(type);
+        }, 2600);
+      },
+
+      stopRinging: function() {
+        if (this._ringTimer) {
+          clearInterval(this._ringTimer);
+          this._ringTimer = null;
+        }
+        this._activeAlert = null;
+        try {
+          var el = document.getElementById('diet-pwa-alarm-banner');
+          if (el && el.parentNode) el.parentNode.removeChild(el);
+        } catch(e) {}
+      },
+
+      snoozeAlarm: function(title, minutes) {
+        this.stopRinging();
+        var mins = parseInt(minutes, 10) || 5;
+        var snoozeMs = Date.now() + mins * 60000;
+        var d = new Date(snoozeMs);
+        var list = this._getSavedAlarms().filter(function(a) {
+          return a && !(a.isSnooze && a.title === title);
+        });
+        list.push({
+          title: title,
+          hour: d.getHours(),
+          minute: d.getMinutes(),
+          targetTime: snoozeMs,
+          lastFired: null,
+          isSnooze: true
+        });
+        this._saveAlarms(list);
+        this.showNotification(
+          "⏰ Doctor's Diet: Snoozed",
+          "Will remind you again for " + title + " in " + mins + " minutes."
+        );
+        this._setupHeartbeat();
+      },
+
+      showNotification: function(title, body, meta) {
         try {
           if (!("Notification" in window) || Notification.permission !== "granted") {
             return false;
           }
-          var options = {
+          var baseOptions = {
             body: body,
             icon: 'icons/Icon-192.png',
             badge: 'icons/Icon-192.png',
             vibrate: [300, 150, 300, 150, 300],
             tag: 'diet-' + Date.now(),
             renotify: true,
-            requireInteraction: true
+            requireInteraction: true,
+            data: meta || {}
           };
-          if (navigator.serviceWorker && navigator.serviceWorker.ready) {
-            navigator.serviceWorker.ready.then(function(reg) {
-              if (reg && reg.showNotification) {
-                reg.showNotification(title, options);
-              } else {
-                try { new Notification(title, options); } catch(_) {}
-              }
-            }).catch(function() {
-              try { new Notification(title, options); } catch(_) {}
-            });
-          } else {
-            try { new Notification(title, options); } catch(_) {}
+          var swOptions = Object.assign({}, baseOptions);
+          if (meta && meta.isAlert) {
+            swOptions.actions = [
+              { action: 'snooze', title: 'Snooze 5m' },
+              { action: 'dismiss', title: 'Dismiss' }
+            ];
           }
+          var fallbackDirect = function() {
+            try { new Notification(title, baseOptions); } catch(_) {}
+          };
+          var timeoutPromise = new Promise(function(resolve) {
+            setTimeout(function() { resolve(null); }, 1500);
+          });
+          Promise.race([this._ensureSw(), timeoutPromise]).then(function(reg) {
+            if (reg && reg.active && typeof reg.showNotification === 'function') {
+              reg.showNotification(title, swOptions).catch(function() {
+                reg.showNotification(title, baseOptions).catch(fallbackDirect);
+              });
+            } else {
+              fallbackDirect();
+            }
+          }).catch(fallbackDirect);
           return true;
         } catch(e) {
           console.warn('Diet notification error:', e);
@@ -398,19 +611,25 @@
         var m = parseInt(minute, 10);
         this._initAudio();
         this.playChime('meal');
-        this.showNotification(
-          "⏰ Doctor's Diet: Alarm Set",
-          "Alarm scheduled for " + title + " at " + h + ":" + (m < 10 ? '0' : '') + m + ". Keep this browser tab open for alerts."
-        );
 
         var target = this._targetDate(h, m, dateKey);
-        var list = this._getSavedAlarms().filter(function(a) { return a && a.title !== title; });
+        var isToday = this._localDateKey(target.getTime()) === this._localDateKey(Date.now());
+        var whenText = (isToday ? 'Today at ' : 'Tomorrow at ') + this._format12h(h, m);
+        this.showNotification(
+          "⏰ Doctor's Diet: Alarm Set",
+          "Scheduled for " + title + " (" + whenText + "). Keep this PWA open for alerts."
+        );
+
+        var list = this._getSavedAlarms().filter(function(a) {
+          return a && !( !a.isSnooze && a.title === title );
+        });
         list.push({
           title: title,
           hour: h,
           minute: m,
           targetTime: target.getTime(),
-          lastFired: null
+          lastFired: null,
+          isSnooze: false
         });
         this._saveAlarms(list);
 
@@ -435,9 +654,12 @@
         this._initAudio();
         this.playChime('water');
         var sec = parseInt(seconds, 10) || 7200;
+        var everyText = sec < 3600
+          ? Math.max(1, Math.round(sec / 60)) + " minutes"
+          : Math.round(sec / 3600) + " hours";
         this.showNotification(
           "💧 Doctor's Diet: Water Reminder Active",
-          "Hydration timer started for every " + Math.round(sec / 3600) + " hours while this tab is open."
+          "Hydration timer started for every " + everyText + " while this PWA is open."
         );
 
         try {
@@ -464,6 +686,8 @@
       },
 
       _setupHeartbeat: function() {
+        this._ensureSw();
+        this._unlockAudioHandlers();
         if (this._heartbeatStarted) return;
         this._heartbeatStarted = true;
         var self = this;
@@ -483,18 +707,22 @@
               var m = (typeof item.minute === 'number') ? item.minute : new Date(item.targetTime).getMinutes();
               var occDateKey = self._localDateKey(item.targetTime);
               if (diff <= lateWindowMs && item.lastFired !== occDateKey) {
-                self.playChime('meal');
                 var lateNote = diff > 60000
                   ? " (late by " + Math.round(diff / 60000) + " min)"
                   : "";
+                var subtitle = "Scheduled for " + self._format12h(h, m) + lateNote + " — time for your " + item.title + "!";
+                self.startRinging('meal', item.title, subtitle);
                 self.showNotification(
                   "⏰ Doctor's Diet: " + item.title + lateNote,
-                  "Time for your scheduled " + item.title + "! Eat healthy and stay consistent."
+                  "Time for your scheduled " + item.title + "! Eat healthy and stay consistent.",
+                  { isAlert: true, alarmType: 'meal', title: item.title }
                 );
                 item.lastFired = occDateKey;
               }
-              item.targetTime = self._nextOccurrenceMs(h, m, now);
-              remaining.push(item);
+              if (!item.isSnooze) {
+                item.targetTime = self._nextOccurrenceMs(h, m, now);
+                remaining.push(item);
+              }
             } else {
               remaining.push(item);
             }
@@ -506,8 +734,12 @@
             if (raw) {
               var w = JSON.parse(raw);
               if (w && w.nextTriggerTime && now >= w.nextTriggerTime) {
-                self.playChime('water');
-                self.showNotification("💧 Doctor's Diet: Hydration Reminder", "Drink a fresh glass of water now to maintain energy and support metabolism!");
+                self.startRinging('water', 'Drink Water', 'Hydration reminder — drink a fresh glass of water now!');
+                self.showNotification(
+                  "💧 Doctor's Diet: Hydration Reminder",
+                  "Drink a fresh glass of water now to maintain energy and support metabolism!",
+                  { isAlert: true, alarmType: 'water', title: w.title || 'Drink Water' }
+                );
                 w.nextTriggerTime = now + (w.intervalSeconds || 7200) * 1000;
                 localStorage.setItem('diet_water_reminder', JSON.stringify(w));
               }
@@ -515,12 +747,14 @@
           } catch(e) {}
         };
 
-        setInterval(checkAlarms, 10000);
+        setInterval(checkAlarms, 2000);
+        window.addEventListener('focus', checkAlarms);
         document.addEventListener('visibilitychange', function() {
           if (document.visibilityState === 'visible') {
             checkAlarms();
           }
         });
+        setTimeout(checkAlarms, 500);
       },
 
       openCalendar: function(title, hour, minute, dateKey) {
