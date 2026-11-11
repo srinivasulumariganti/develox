@@ -266,6 +266,22 @@
         }
       },
 
+      getPermissionState: function() {
+        if (!("Notification" in window)) return 'unsupported';
+        try {
+          return Notification.permission || 'default';
+        } catch(e) {
+          return 'denied';
+        }
+      },
+
+      _localDateKey: function(ms) {
+        var d = new Date(ms || Date.now());
+        var m = d.getMonth() + 1;
+        var day = d.getDate();
+        return d.getFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day;
+      },
+
       playChime: function(type) {
         try {
           this._initAudio();
@@ -340,29 +356,61 @@
         } catch(e) {}
       },
 
-      scheduleAlarm: function(title, hour, minute) {
-        var self = this;
-        this._initAudio();
-        this.playChime('meal');
-        this.requestPermission().then(function(perm) {
-          if (perm === 'granted') {
-            self.showNotification("⏰ Doctor's Diet: Alarm Set", "Alarm scheduled for " + title + " at " + hour + ":" + (minute < 10 ? '0' : '') + minute + ". We'll alert you!");
-          }
-        });
-
+      _targetDate: function(hour, minute, dateKey) {
         var now = new Date();
-        var target = new Date();
-        target.setHours(parseInt(hour, 10), parseInt(minute, 10), 0, 0);
-        if (target.getTime() <= now.getTime()) {
+        var h = parseInt(hour, 10);
+        var m = parseInt(minute, 10);
+        var target;
+        if (dateKey && /^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
+          var parts = dateKey.split('-');
+          target = new Date(
+            parseInt(parts[0], 10),
+            parseInt(parts[1], 10) - 1,
+            parseInt(parts[2], 10),
+            h,
+            m,
+            0,
+            0
+          );
+        } else {
+          target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0, 0);
+        }
+        while (target.getTime() <= now.getTime()) {
           target.setDate(target.getDate() + 1);
         }
+        return target;
+      },
 
-        var list = this._getSavedAlarms().filter(function(a) { return a.title !== title; });
+      _nextOccurrenceMs: function(hour, minute, afterMs) {
+        var d = new Date(afterMs);
+        d.setHours(parseInt(hour, 10), parseInt(minute, 10), 0, 0);
+        while (d.getTime() <= afterMs) {
+          d.setDate(d.getDate() + 1);
+        }
+        return d.getTime();
+      },
+
+      scheduleAlarm: function(title, hour, minute, dateKey) {
+        if (this.getPermissionState() !== 'granted') {
+          return false;
+        }
+        var h = parseInt(hour, 10);
+        var m = parseInt(minute, 10);
+        this._initAudio();
+        this.playChime('meal');
+        this.showNotification(
+          "⏰ Doctor's Diet: Alarm Set",
+          "Alarm scheduled for " + title + " at " + h + ":" + (m < 10 ? '0' : '') + m + ". Keep this browser tab open for alerts."
+        );
+
+        var target = this._targetDate(h, m, dateKey);
+        var list = this._getSavedAlarms().filter(function(a) { return a && a.title !== title; });
         list.push({
           title: title,
-          hour: parseInt(hour, 10),
-          minute: parseInt(minute, 10),
-          targetTime: target.getTime()
+          hour: h,
+          minute: m,
+          targetTime: target.getTime(),
+          lastFired: null
         });
         this._saveAlarms(list);
 
@@ -370,16 +418,27 @@
         return true;
       },
 
+      cancelAlarm: function(title) {
+        try {
+          var list = this._getSavedAlarms().filter(function(a) { return a && a.title !== title; });
+          this._saveAlarms(list);
+          return true;
+        } catch(e) {
+          return false;
+        }
+      },
+
       scheduleTimer: function(seconds, title) {
-        var self = this;
+        if (this.getPermissionState() !== 'granted') {
+          return false;
+        }
         this._initAudio();
         this.playChime('water');
         var sec = parseInt(seconds, 10) || 7200;
-        this.requestPermission().then(function(perm) {
-          if (perm === 'granted') {
-            self.showNotification("💧 Doctor's Diet: Water Reminder Active", "Hydration timer started for every " + Math.round(sec / 3600) + " hours. Stay refreshed!");
-          }
-        });
+        this.showNotification(
+          "💧 Doctor's Diet: Water Reminder Active",
+          "Hydration timer started for every " + Math.round(sec / 3600) + " hours while this tab is open."
+        );
 
         try {
           localStorage.setItem('diet_water_reminder', JSON.stringify({
@@ -387,28 +446,54 @@
             intervalSeconds: sec,
             nextTriggerTime: Date.now() + sec * 1000
           }));
-        } catch(e) {}
+        } catch(e) {
+          return false;
+        }
 
         this._setupHeartbeat();
         return true;
+      },
+
+      cancelWaterReminder: function() {
+        try {
+          localStorage.removeItem('diet_water_reminder');
+          return true;
+        } catch(e) {
+          return false;
+        }
       },
 
       _setupHeartbeat: function() {
         if (this._heartbeatStarted) return;
         this._heartbeatStarted = true;
         var self = this;
+        var lateWindowMs = 30 * 60 * 1000;
         var checkAlarms = function() {
           var now = Date.now();
           var list = self._getSavedAlarms();
           var remaining = [];
           list.forEach(function(item) {
-            if (item.targetTime && now >= item.targetTime && (now - item.targetTime < 600000)) {
-              self.playChime('meal');
-              self.showNotification("⏰ Doctor's Diet: " + item.title, "Time for your scheduled " + item.title + "! Eat healthy and stay consistent.");
-              item.targetTime += 24 * 60 * 60 * 1000;
-              remaining.push(item);
-            } else if (item.targetTime && now > item.targetTime + 600000) {
-              item.targetTime += 24 * 60 * 60 * 1000;
+            if (!item || !item.targetTime) {
+              if (item) remaining.push(item);
+              return;
+            }
+            var diff = now - item.targetTime;
+            if (diff >= 0) {
+              var h = (typeof item.hour === 'number') ? item.hour : new Date(item.targetTime).getHours();
+              var m = (typeof item.minute === 'number') ? item.minute : new Date(item.targetTime).getMinutes();
+              var occDateKey = self._localDateKey(item.targetTime);
+              if (diff <= lateWindowMs && item.lastFired !== occDateKey) {
+                self.playChime('meal');
+                var lateNote = diff > 60000
+                  ? " (late by " + Math.round(diff / 60000) + " min)"
+                  : "";
+                self.showNotification(
+                  "⏰ Doctor's Diet: " + item.title + lateNote,
+                  "Time for your scheduled " + item.title + "! Eat healthy and stay consistent."
+                );
+                item.lastFired = occDateKey;
+              }
+              item.targetTime = self._nextOccurrenceMs(h, m, now);
               remaining.push(item);
             } else {
               remaining.push(item);
@@ -438,13 +523,9 @@
         });
       },
 
-      openCalendar: function(title, hour, minute) {
+      openCalendar: function(title, hour, minute, dateKey) {
         try {
-          var now = new Date();
-          var start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), parseInt(hour, 10), parseInt(minute, 10));
-          if (start.getTime() <= now.getTime()) {
-            start.setDate(start.getDate() + 1);
-          }
+          var start = this._targetDate(hour, minute, dateKey);
           var end = new Date(start.getTime() + 30 * 60000);
           function fmt(d) {
             return d.toISOString().replace(/-|:|\.\d\d\d/g, "");
@@ -458,13 +539,10 @@
         } catch(e) {}
       },
 
-      downloadIcsAlarm: function(title, hour, minute) {
+      downloadIcsAlarm: function(title, hour, minute, dateKey) {
         try {
           var now = new Date();
-          var start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), parseInt(hour, 10), parseInt(minute, 10));
-          if (start.getTime() <= now.getTime()) {
-            start.setDate(start.getDate() + 1);
-          }
+          var start = this._targetDate(hour, minute, dateKey);
           var end = new Date(start.getTime() + 30 * 60000);
           function fmt(d) {
             return d.toISOString().replace(/-|:|\.\d\d\d/g, "");
@@ -504,20 +582,29 @@
     // Auto-resume heartbeat for background / persistent alarms
     window.dietAlarm._setupHeartbeat();
 
-    window.dietScheduleAlarm = function(title, hour, minute) {
-      return window.dietAlarm.scheduleAlarm(title, hour, minute);
+    window.dietScheduleAlarm = function(title, hour, minute, dateKey) {
+      return window.dietAlarm.scheduleAlarm(title, hour, minute, dateKey);
+    };
+    window.dietCancelAlarm = function(title) {
+      return window.dietAlarm.cancelAlarm(title);
     };
     window.dietScheduleTimer = function(seconds, title) {
       return window.dietAlarm.scheduleTimer(seconds, title);
     };
+    window.dietCancelWaterReminder = function() {
+      return window.dietAlarm.cancelWaterReminder();
+    };
     window.dietRequestAlarmPermission = function() {
       return window.dietAlarm.requestPermission();
     };
-    window.dietOpenCalendar = function(title, hour, minute) {
-      return window.dietAlarm.openCalendar(title, hour, minute);
+    window.dietGetAlarmPermission = function() {
+      return window.dietAlarm.getPermissionState();
     };
-    window.dietDownloadIcsAlarm = function(title, hour, minute) {
-      return window.dietAlarm.downloadIcsAlarm(title, hour, minute);
+    window.dietOpenCalendar = function(title, hour, minute, dateKey) {
+      return window.dietAlarm.openCalendar(title, hour, minute, dateKey);
+    };
+    window.dietDownloadIcsAlarm = function(title, hour, minute, dateKey) {
+      return window.dietAlarm.downloadIcsAlarm(title, hour, minute, dateKey);
     };
 
 
